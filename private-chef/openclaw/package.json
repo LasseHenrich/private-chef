@@ -1,0 +1,9 @@
+{
+  "name": "private-chef-openclaw",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "WhatsApp adapter for the local Private Chef service",
+  "openclaw": { "extensions": ["./index.mjs"] },
+  "scripts": { "test": "node --test test.mjs" }
+}

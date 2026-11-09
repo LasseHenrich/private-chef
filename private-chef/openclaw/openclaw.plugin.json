@@ -1,0 +1,13 @@
+{
+  "id": "private-chef",
+  "name": "Private Chef",
+  "description": "Shared cooking recommendations, preferences, feedback and shopping",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "serviceUrl": { "type": "string", "default": "http://127.0.0.1:8787" },
+      "naturalLanguageTool": { "type": "boolean", "default": false }
+    }
+  }
+}
