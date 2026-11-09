@@ -1,0 +1,23 @@
+# Credentials and private runtime data (including nested application copies).
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+node_modules/
+data/
+.openclaw/
+*.sqlite*
+*.db
+*.bundle
+*.log
+.DS_Store
