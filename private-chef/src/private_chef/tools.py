@@ -179,14 +179,14 @@ class Tools:
             case "set_meal_status":
                 return s.set_selection_status(**arguments)
             case "build_shopping_list":
-                for meal in s.history()["selections"]:
-                    if meal["status"] == "planned":
-                        reasons = blocked_reasons(s.recipe(meal["recipe_id"]), s.household())
-                        if reasons:
-                            raise ChefError(
-                                f"Planned meal {meal['id']} conflicts with current restrictions. "
-                                "Cancel it or choose a suitable replacement before building the list"
-                            )
+                household = s.household()
+                for meal in s.planned_meals():
+                    reasons = blocked_reasons(s.recipe(meal["recipe_id"]), household)
+                    if reasons:
+                        raise ChefError(
+                            f"Planned meal {meal['id']} conflicts with current restrictions. "
+                            "Cancel it or choose a suitable replacement before building the list"
+                        )
                 return s.build_shopping()
             case "get_shopping_list":
                 return s.shopping()

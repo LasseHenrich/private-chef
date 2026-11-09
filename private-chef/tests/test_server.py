@@ -50,6 +50,7 @@ class ServerTests(unittest.TestCase):
         for body in (
             [],
             {},
+            {"member_id": [], "message": "Hi", "request_id": "r3"},
             {"member_id": "person-1", "message": "", "request_id": "r3"},
             {"member_id": "person-1", "message": "x" * 4001, "request_id": "r3"},
             {"member_id": "person-1", "message": "Hi", "request_id": "r3", "extra": "x"},

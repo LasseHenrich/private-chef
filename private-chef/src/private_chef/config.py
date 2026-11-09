@@ -1,6 +1,7 @@
 """Small, non-executing .env reader. Environment variables take precedence."""
 
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -57,9 +58,11 @@ class Settings:
     def validate_server(self) -> None:
         if len(self.api_token) < 32:
             raise ValueError("Set CHEF_API_TOKEN to at least 32 characters; run setup first")
+        if not 1 <= self.port <= 65535:
+            raise ValueError("CHEF_PORT must be between 1 and 65535")
         numbers = [number for number in self.whatsapp if number]
         if len(set(numbers)) != len(numbers):
             raise ValueError("Each household member needs a different WhatsApp number")
         for number in numbers:
-            if not number.startswith("+") or not number[1:].isdigit():
+            if not re.fullmatch(r"\+[1-9][0-9]{6,14}", number):
                 raise ValueError("WhatsApp numbers must use E.164 format, starting with +")

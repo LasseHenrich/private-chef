@@ -197,6 +197,13 @@ class Store:
                 ],
             }
 
+    def planned_meals(self) -> list[dict]:
+        with self.connect() as db:
+            return [
+                dict(row)
+                for row in db.execute("SELECT * FROM selections WHERE status='planned' ORDER BY id")
+            ]
+
     def select(self, actor: str, recipe_id: int, servings: int) -> dict:
         self.recipe(recipe_id)
         with self.connect() as db:

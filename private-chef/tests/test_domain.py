@@ -136,6 +136,9 @@ class DomainTests(unittest.TestCase):
 
     def test_preference_changes_revalidate_already_planned_meals_before_shopping(self):
         self.one.execute("select_recipe", dict(recipe_id=3, servings=2))
+        # An old planned meal must still be checked after it drops out of recent history.
+        for _ in range(51):
+            self.store.select("person-1", 1, 2)
         self.two.execute("set_preference", dict(kind="diet", value="vegan", remove=False))
         with self.assertRaisesRegex(ChefError, "conflicts with current restrictions"):
             self.one.execute("build_shopping_list", {})

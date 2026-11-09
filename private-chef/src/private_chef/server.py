@@ -42,7 +42,7 @@ class Application:
         if body.get("source", "local") != "local" or "sender_id" in body:
             raise ChefError("Invalid message source")
         actor = body.get("member_id")
-        if actor not in {"person-1", "person-2"}:
+        if not isinstance(actor, str) or actor not in {"person-1", "person-2"}:
             raise ChefError("Choose member_id person-1 or person-2")
         return actor
 
