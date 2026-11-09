@@ -23,8 +23,12 @@ def array(items, minimum=0, maximum=50):
 
 
 def obj(**properties):
-    return {"type": "object", "properties": properties, "required": list(properties),
-            "additionalProperties": False}
+    return {
+        "type": "object",
+        "properties": properties,
+        "required": list(properties),
+        "additionalProperties": False,
+    }
 
 
 NUMBER = {"type": "number", "minimum": 0.001, "maximum": 100000}
@@ -36,8 +40,11 @@ SCHEMAS = {
         "Add or remove a lasting preference for the current person only. "
         "exclude is an ingredient exclusion; diet requires a supported dietary tag. "
         "Temporary requests and one-off preparation feedback are not lasting preferences.",
-        obj(kind=choice("like", "dislike", "exclude", "cuisine", "diet"), value=text(),
-            remove={"type": "boolean"}),
+        obj(
+            kind=choice("like", "dislike", "exclude", "cuisine", "diet"),
+            value=text(),
+            remove={"type": "boolean"},
+        ),
     ),
     "list_recipes": ("List saved recipes with IDs, ingredients and instructions.", obj()),
     "get_recipe": ("Read a saved recipe.", obj(recipe_id=integer())),
@@ -45,9 +52,14 @@ SCHEMAS = {
         "Save a complete recipe before recommending it. Use only justified dietary tags; "
         "source_url must be empty for an original/generated recipe. Ingredients use grams, "
         "millilitres or pieces where possible. Never invent a source URL.",
-        obj(title=text(), servings=integer(1, 20), ingredients=array(INGREDIENT, 1),
-            instructions=array(text(1500), 1, 30), tags=array(text(80), 0, 20),
-            source_url=text(2000, 0)),
+        obj(
+            title=text(),
+            servings=integer(1, 20),
+            ingredients=array(INGREDIENT, 1),
+            instructions=array(text(1500), 1, 30),
+            tags=array(text(80), 0, 20),
+            source_url=text(2000, 0),
+        ),
     ),
     "recommend_recipes": (
         "Rank saved recipes for BOTH people, excluding recorded restrictions and accounting "
@@ -71,7 +83,8 @@ SCHEMAS = {
     ),
     "build_shopping_list": (
         "Generate/update the shared shopping list from planned meals. Repeated calls do not "
-        "duplicate quantities. Existing bought flags and manual additions are retained.", obj(),
+        "duplicate quantities. Existing bought flags and manual additions are retained.",
+        obj(),
     ),
     "get_shopping_list": ("Read the shared list, including bought flags and item IDs.", obj()),
     "add_shopping_item": (
@@ -84,15 +97,28 @@ SCHEMAS = {
     ),
     "clear_shopping_list": (
         "Clear the entire list ONLY if the user explicitly requests clearing it. "
-        "Planned meals remain and can be used to build another list.", obj(),
+        "Planned meals remain and can be used to build another list.",
+        obj(),
+    ),
+    "remove_shopping_item": (
+        "Remove an item from the current shared list. Building the list again from planned "
+        "meals can re-add it; explain this when relevant.",
+        obj(item_id=integer()),
     ),
 }
 
 
 def definitions() -> list[dict]:
-    return [{"type": "function", "name": name, "description": description,
-             "parameters": schema, "strict": True}
-            for name, (description, schema) in SCHEMAS.items()]
+    return [
+        {
+            "type": "function",
+            "name": name,
+            "description": description,
+            "parameters": schema,
+            "strict": True,
+        }
+        for name, (description, schema) in SCHEMAS.items()
+    ]
 
 
 def blocked_reasons(recipe: dict, household: dict) -> list[str]:
@@ -134,7 +160,9 @@ class Tools:
                 return s.recipe(**arguments)
             case "save_recipe":
                 url = arguments["source_url"]
-                if url and (urlsplit(url).scheme not in {"http", "https"} or not urlsplit(url).netloc):
+                if url and (
+                    urlsplit(url).scheme not in {"http", "https"} or not urlsplit(url).netloc
+                ):
                     raise ChefError("Recipe source must be an http(s) URL or empty")
                 return s.save_recipe(**arguments)
             case "recommend_recipes":
@@ -151,6 +179,14 @@ class Tools:
             case "set_meal_status":
                 return s.set_selection_status(**arguments)
             case "build_shopping_list":
+                for meal in s.history()["selections"]:
+                    if meal["status"] == "planned":
+                        reasons = blocked_reasons(s.recipe(meal["recipe_id"]), s.household())
+                        if reasons:
+                            raise ChefError(
+                                f"Planned meal {meal['id']} conflicts with current restrictions. "
+                                "Cancel it or choose a suitable replacement before building the list"
+                            )
                 return s.build_shopping()
             case "get_shopping_list":
                 return s.shopping()
@@ -160,6 +196,8 @@ class Tools:
                 return s.mark_shopping(**arguments)
             case "clear_shopping_list":
                 return s.clear_shopping()
+            case "remove_shopping_item":
+                return s.remove_shopping(**arguments)
         raise ChefError("Unknown tool")
 
     def recommend(self, count: int) -> dict:
@@ -168,8 +206,13 @@ class Tools:
         for recipe in self.store.recipes():
             if blocked_reasons(recipe, household):
                 continue
-            haystack = normalized(recipe["title"] + " " + " ".join(recipe["tags"]) + " " +
-                                   " ".join(item["name"] for item in recipe["ingredients"]))
+            haystack = normalized(
+                recipe["title"]
+                + " "
+                + " ".join(recipe["tags"])
+                + " "
+                + " ".join(item["name"] for item in recipe["ingredients"])
+            )
             scores, reasons = [], []
             for member in household["members"]:
                 score = 0.0
@@ -177,23 +220,35 @@ class Tools:
                     if preference["value"] in haystack:
                         if preference["kind"] in {"like", "cuisine"}:
                             score += 1
-                            reasons.append(f"Matches {member['name']}'s {preference['value']} preference")
+                            reasons.append(
+                                f"Matches {member['name']}'s {preference['value']} preference"
+                            )
                         elif preference["kind"] == "dislike":
                             score -= 2
-                ratings = [f["rating"] for f in history["feedback"]
-                           if f["member_id"] == member["id"] and f["recipe_id"] == recipe["id"]]
+                ratings = [
+                    f["rating"]
+                    for f in history["feedback"]
+                    if f["member_id"] == member["id"] and f["recipe_id"] == recipe["id"]
+                ]
                 if ratings:
                     score += sum(ratings) / len(ratings) - 3
-                    reasons.append(f"{member['name']}'s average rating: {sum(ratings)/len(ratings):.1f}/5")
+                    reasons.append(
+                        f"{member['name']}'s average rating: {sum(ratings) / len(ratings):.1f}/5"
+                    )
                 scores.append(score)
-            repeated = any(meal["recipe_id"] == recipe["id"] and meal["status"] != "cancelled"
-                           for meal in history["selections"][:7])
+            repeated = any(
+                meal["recipe_id"] == recipe["id"] and meal["status"] != "cancelled"
+                for meal in history["selections"][:7]
+            )
             # Favour the less enthusiastic partner before using total enthusiasm to break ties.
             score = min(scores) * 2 + sum(scores) - (2 if repeated else 0)
             if repeated:
                 reasons.append("Recently selected; reduced priority for variety")
             candidates.append({"recipe": recipe, "score": score, "reasons": reasons})
         candidates.sort(key=lambda item: (-item["score"], item["recipe"]["id"]))
-        return {"candidates": candidates[:count], "eligible_count": len(candidates),
-                "note": "Ingredient text/tag checks cannot certify allergen safety. "
-                        "Review labels and substitutions for allergies."}
+        return {
+            "candidates": candidates[:count],
+            "eligible_count": len(candidates),
+            "note": "Ingredient text/tag checks cannot certify allergen safety. "
+            "Review labels and substitutions for allergies.",
+        }

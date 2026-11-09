@@ -9,10 +9,17 @@ class ChefError(ValueError):
 
 def validate(value, schema: dict, path: str = "input") -> None:
     kind = schema["type"]
-    types = {"object": dict, "array": list, "string": str, "number": (int, float),
-             "integer": int, "boolean": bool}
-    if not isinstance(value, types[kind]) or (kind in {"number", "integer"}
-                                             and isinstance(value, bool)):
+    types = {
+        "object": dict,
+        "array": list,
+        "string": str,
+        "number": (int, float),
+        "integer": int,
+        "boolean": bool,
+    }
+    if not isinstance(value, types[kind]) or (
+        kind in {"number", "integer"} and isinstance(value, bool)
+    ):
         raise ChefError(f"{path} must be {kind}")
     if "enum" in schema and value not in schema["enum"]:
         raise ChefError(f"{path} must be one of {schema['enum']}")

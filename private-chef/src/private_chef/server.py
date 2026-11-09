@@ -3,7 +3,6 @@
 import hmac
 import json
 import logging
-import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -25,15 +24,18 @@ class Application:
         self.slots = threading.BoundedSemaphore(4)
 
     def authorize(self, authorization: str) -> bool:
-        return hmac.compare_digest(authorization.encode(),
-                                   f"Bearer {self.settings.api_token}".encode())
+        return hmac.compare_digest(
+            authorization.encode(), f"Bearer {self.settings.api_token}".encode()
+        )
 
     def actor(self, body: dict) -> str:
         if body.get("source", "local") == "whatsapp":
             if "member_id" in body:
                 raise ChefError("WhatsApp identity must come from sender metadata")
             sender = body.get("sender_id")
-            for member_id, number in zip(("person-1", "person-2"), self.settings.whatsapp, strict=True):
+            for member_id, number in zip(
+                ("person-1", "person-2"), self.settings.whatsapp, strict=True
+            ):
                 if number and sender == number:
                     return member_id
             raise PermissionError("Sender is not in the household allowlist")
@@ -53,8 +55,12 @@ class Application:
             if method == "GET" and path == "/v1/state":
                 with self.chef.lock:
                     store = self.chef.store
-                    return 200, {**store.household(), **store.history(),
-                                 "recipes": store.recipes(), "shopping": store.shopping()}
+                    return 200, {
+                        **store.household(),
+                        **store.history(),
+                        "recipes": store.recipes(),
+                        "shopping": store.shopping(),
+                    }
             if method == "GET" and path == "/v1/tools":
                 return 200, {"tools": definitions()}
             if method != "POST" or path not in {"/v1/chat", "/v1/tool"}:
@@ -92,7 +98,9 @@ class Application:
         except Exception:
             # No exception text or tracebacks: those may contain messages or credentials.
             LOGGER.error("Request failed; check database availability and configuration")
-            return 500, {"error": "Request failed. Some changes may have been saved; check current state"}
+            return 500, {
+                "error": "Request failed. Some changes may have been saved; check current state"
+            }
 
 
 def handler_for(application: Application):
@@ -119,8 +127,9 @@ def handler_for(application: Application):
             self.wfile.write(data)
 
         def do_GET(self):
-            status, result = application.dispatch("GET", self.path,
-                                                   self.headers.get("Authorization", ""), {})
+            status, result = application.dispatch(
+                "GET", self.path, self.headers.get("Authorization", ""), {}
+            )
             self.send_json(status, result)
 
         def do_POST(self):
@@ -147,12 +156,13 @@ def handler_for(application: Application):
                 if len(raw) != length:
                     raise ChefError("Incomplete request")
                 body = json.loads(raw)
-            except (ValueError, UnicodeError, ChefError, socket.timeout):
+            except (TimeoutError, ValueError, UnicodeError, ChefError):
                 self.close_connection = True
                 self.send_json(400, {"error": "Invalid JSON request"})
                 return
-            status, result = application.dispatch("POST", self.path,
-                                                   self.headers.get("Authorization", ""), body)
+            status, result = application.dispatch(
+                "POST", self.path, self.headers.get("Authorization", ""), body
+            )
             self.send_json(status, result)
 
     return Handler
@@ -160,10 +170,15 @@ def handler_for(application: Application):
 
 def serve(application: Application):
     if application.settings.host not in {"127.0.0.1", "localhost"}:
-        raise ChefError("Local server must bind to loopback. Use a hardened deployment adapter later")
-    with ThreadingHTTPServer((application.settings.host, application.settings.port),
-                             handler_for(application)) as server:
-        print(f"Private Chef listening on http://{application.settings.host}:{application.settings.port}")
+        raise ChefError(
+            "Local server must bind to loopback. Use a hardened deployment adapter later"
+        )
+    with ThreadingHTTPServer(
+        (application.settings.host, application.settings.port), handler_for(application)
+    ) as server:
+        print(
+            f"Private Chef listening on http://{application.settings.host}:{application.settings.port}"
+        )
         print("Press Ctrl+C to stop. Chat is available once OPENAI_API_KEY is configured.")
         try:
             server.serve_forever()

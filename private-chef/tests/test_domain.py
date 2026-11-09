@@ -30,8 +30,9 @@ class DomainTests(unittest.TestCase):
 
     def test_model_cannot_impersonate_another_member(self):
         with self.assertRaises(ChefError):
-            self.one.execute("set_preference", dict(kind="like", value="x", remove=False,
-                                                    actor="person-2"))
+            self.one.execute(
+                "set_preference", dict(kind="like", value="x", remove=False, actor="person-2")
+            )
         with self.assertRaises(ChefError):
             Tools(self.store, "intruder")
 
@@ -70,14 +71,16 @@ class DomainTests(unittest.TestCase):
         selected = self.one.execute("select_recipe", dict(recipe_id=1, servings=2))
         self.one.execute("build_shopping_list", {})
         self.one.execute("add_shopping_item", dict(name="Olive Oil", quantity=10, unit="ml"))
-        self.two.execute("set_meal_status", dict(selection_id=selected["selection_id"],
-                                                  status="cancelled"))
+        self.two.execute(
+            "set_meal_status", dict(selection_id=selected["selection_id"], status="cancelled")
+        )
         self.assertEqual(len(self.store.shopping()), 1)
         self.assertEqual(self.store.shopping()[0]["quantity"], 10)
 
     def test_concurrent_manual_additions_are_not_lost(self):
         def add(_):
             self.store.add_shopping("tomatoes", 1, "piece")
+
         with ThreadPoolExecutor(max_workers=4) as pool:
             list(pool.map(add, range(20)))
         self.assertEqual(self.store.shopping()[0]["quantity"], 20)
@@ -90,7 +93,9 @@ class DomainTests(unittest.TestCase):
     def test_invalid_inputs_do_not_mutate_state(self):
         for quantity in (0, -1, float("nan"), float("inf"), True):
             with self.subTest(quantity=quantity), self.assertRaises(ChefError):
-                self.one.execute("add_shopping_item", dict(name="rice", quantity=quantity, unit="g"))
+                self.one.execute(
+                    "add_shopping_item", dict(name="rice", quantity=quantity, unit="g")
+                )
         with self.assertRaises(ChefError):
             self.one.execute("record_feedback", dict(recipe_id=999, rating=3, comment=""))
         self.assertEqual(self.store.shopping(), [])
@@ -107,6 +112,34 @@ class DomainTests(unittest.TestCase):
     def test_seed_is_idempotent(self):
         self.assertEqual(seed(self.store), 0)
         self.assertEqual(len(self.store.recipes()), 6)
+
+    def test_changed_taste_replaces_opposite_preference_but_preserves_exclusion(self):
+        for kind in ("dislike", "exclude", "like"):
+            self.one.execute("set_preference", dict(kind=kind, value="olives", remove=False))
+        preferences = self.store.household()["members"][0]["preferences"]
+        self.assertEqual({p["kind"] for p in preferences}, {"like", "exclude"})
+
+    def test_additional_meal_reopens_bought_items_when_quantity_increases(self):
+        self.store.select("person-1", 1, 2)
+        oil = next(item for item in self.store.build_shopping() if item["name"] == "olive oil")
+        self.store.mark_shopping(oil["id"], True)
+        self.store.select("person-2", 2, 2)
+        rebuilt = next(item for item in self.store.build_shopping() if item["id"] == oil["id"])
+        self.assertFalse(rebuilt["purchased"])
+        self.assertEqual(rebuilt["quantity"], 30)
+
+    def test_removing_item_updates_shared_list(self):
+        self.store.add_shopping("rice", 200, "g")
+        item_id = self.store.shopping()[0]["id"]
+        self.two.execute("remove_shopping_item", {"item_id": item_id})
+        self.assertEqual(self.one.execute("get_shopping_list", {}), [])
+
+    def test_preference_changes_revalidate_already_planned_meals_before_shopping(self):
+        self.one.execute("select_recipe", dict(recipe_id=3, servings=2))
+        self.two.execute("set_preference", dict(kind="diet", value="vegan", remove=False))
+        with self.assertRaisesRegex(ChefError, "conflicts with current restrictions"):
+            self.one.execute("build_shopping_list", {})
+        self.assertEqual(self.store.shopping(), [])
 
 
 if __name__ == "__main__":

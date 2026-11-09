@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from .agent import Chef, OpenAIResponses
 from .config import PROJECT_ROOT, Settings
+from .openclaw import configure, launch
 from .seed import seed
 from .server import Application, serve
 from .store import Store
@@ -23,7 +24,9 @@ def setup(root: Path = PROJECT_ROOT):
         print(".env already exists; left unchanged")
     else:
         template = (root / ".env.example").read_text()
-        template = template.replace("CHEF_API_TOKEN=\n", f"CHEF_API_TOKEN={secrets.token_urlsafe(32)}\n")
+        template = template.replace(
+            "CHEF_API_TOKEN=\n", f"CHEF_API_TOKEN={secrets.token_urlsafe(32)}\n"
+        )
         # O_EXCL and mode 0600 prevent races and accidental world-readable secrets.
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "w") as file:
@@ -41,27 +44,54 @@ def main():
     commands.add_parser("setup", help="Create .env and initialize the database without API calls")
     commands.add_parser("serve", help="Start authenticated local HTTP service")
     commands.add_parser("state", help="Print shared records (contains personal information)")
+    commands.add_parser(
+        "configure-openclaw", help="Generate isolated WhatsApp gateway configuration"
+    )
+    gateway = commands.add_parser(
+        "openclaw", help="Run OpenClaw with the local .env and private state"
+    )
+    gateway.add_argument("arguments", nargs=argparse.REMAINDER)
     chat = commands.add_parser("chat", help="Interactive local chat using your OpenAI API key")
     chat.add_argument("--member", choices=["person-1", "person-2"], default="person-1")
     tool = commands.add_parser("tool", help="Execute a structured tool locally without a model")
     tool.add_argument("name")
     tool.add_argument("--member", choices=["person-1", "person-2"], default="person-1")
-    tool.add_argument("--json", default="{}", help="JSON arguments; keep private data out of shell history")
+    tool.add_argument(
+        "--json", default="{}", help="JSON arguments; keep private data out of shell history"
+    )
     args = parser.parse_args()
     try:
         if args.command == "setup":
             setup()
             return
+        if args.command == "openclaw":
+            sys.exit(launch(args.arguments))
         settings = Settings.load()
+        if args.command == "configure-openclaw":
+            print(f"Created {configure(settings)}")
+            return
         store = Store(settings.db_path)
         store.initialize(settings.names)
         if args.command == "tool":
-            print(json.dumps(Tools(store, args.member).execute(args.name, json.loads(args.json)), indent=2))
+            print(
+                json.dumps(
+                    Tools(store, args.member).execute(args.name, json.loads(args.json)), indent=2
+                )
+            )
             return
         chef = Chef(store, OpenAIResponses(settings))
         if args.command == "state":
-            print(json.dumps({**store.household(), **store.history(),
-                              "recipes": store.recipes(), "shopping": store.shopping()}, indent=2))
+            print(
+                json.dumps(
+                    {
+                        **store.household(),
+                        **store.history(),
+                        "recipes": store.recipes(),
+                        "shopping": store.shopping(),
+                    },
+                    indent=2,
+                )
+            )
         elif args.command == "serve":
             serve(Application(settings, chef))
         elif args.command == "chat":

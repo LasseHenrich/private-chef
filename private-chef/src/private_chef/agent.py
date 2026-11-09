@@ -50,14 +50,20 @@ class OpenAIResponses:
         if not self.settings.openai_key:
             raise ChefError("Add OPENAI_API_KEY to .env and restart the service to enable chat")
         payload = {
-            "model": self.settings.model, "input": messages, "tools": tools,
-            "store": False, "parallel_tool_calls": False, "max_output_tokens": 2500,
+            "model": self.settings.model,
+            "input": messages,
+            "tools": tools,
+            "store": False,
+            "parallel_tool_calls": False,
+            "max_output_tokens": 2500,
         }
         request = Request(
             "https://api.openai.com/v1/responses",
             data=json.dumps(payload, allow_nan=False).encode(),
-            headers={"Authorization": f"Bearer {self.settings.openai_key}",
-                     "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {self.settings.openai_key}",
+                "Content-Type": "application/json",
+            },
             method="POST",
         )
         try:
@@ -68,12 +74,19 @@ class OpenAIResponses:
             data = json.loads(body)
         except HTTPError as error:
             # Do not expose upstream bodies, headers, API keys or request text in errors/logs.
-            explanations = {401: "OpenAI rejected the API key", 403: "OpenAI access was denied",
-                            404: "Configured OpenAI model is unavailable",
-                            429: "OpenAI quota or rate limit reached; try again later"}
-            raise ChefError(explanations.get(error.code, "OpenAI request failed; try again later")) from None
+            explanations = {
+                401: "OpenAI rejected the API key",
+                403: "OpenAI access was denied",
+                404: "Configured OpenAI model is unavailable",
+                429: "OpenAI quota or rate limit reached; try again later",
+            }
+            raise ChefError(
+                explanations.get(error.code, "OpenAI request failed; try again later")
+            ) from None
         except (URLError, TimeoutError, OSError, ValueError):
-            raise ChefError("Cannot reach OpenAI or received an invalid response; try again later") from None
+            raise ChefError(
+                "Cannot reach OpenAI or received an invalid response; try again later"
+            ) from None
         if not isinstance(data, dict) or not isinstance(data.get("output"), list):
             raise ChefError("OpenAI returned an invalid response")
         return data
@@ -138,8 +151,16 @@ class Chef:
                     arguments = json.loads(call["arguments"])
                     result = tools.execute(call["name"], arguments)
                 except (ChefError, ValueError, KeyError, TypeError) as error:
-                    result = {"error": str(error) if isinstance(error, ChefError)
-                              else "Invalid tool arguments"}
-                messages.append({"type": "function_call_output", "call_id": call_id,
-                                 "output": json.dumps(result, allow_nan=False)})
+                    result = {
+                        "error": str(error)
+                        if isinstance(error, ChefError)
+                        else "Invalid tool arguments"
+                    }
+                messages.append(
+                    {
+                        "type": "function_call_output",
+                        "call_id": call_id,
+                        "output": json.dumps(result, allow_nan=False),
+                    }
+                )
         raise ChefError("Too many model steps. Check saved changes before trying again")

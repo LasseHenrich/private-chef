@@ -5,5 +5,5 @@
   "type": "module",
   "description": "WhatsApp adapter for the local Private Chef service",
   "openclaw": { "extensions": ["./index.mjs"] },
-  "scripts": { "test": "node --test test.mjs" }
+  "scripts": { "test": "node test.mjs" }
 }

@@ -13,13 +13,29 @@ from private_chef.validation import ChefError
 
 
 def answer(text="Done"):
-    return {"status": "completed", "output": [
-        {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": text}]}]}
+    return {
+        "status": "completed",
+        "output": [
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": text}],
+            }
+        ],
+    }
 
 
 def call(name, arguments, call_id="c1"):
-    return {"output": [{"type": "function_call", "name": name, "call_id": call_id,
-                        "arguments": json.dumps(arguments)}]}
+    return {
+        "output": [
+            {
+                "type": "function_call",
+                "name": name,
+                "call_id": call_id,
+                "arguments": json.dumps(arguments),
+            }
+        ]
+    }
 
 
 class FakeModel:
@@ -41,8 +57,12 @@ class AgentTests(unittest.TestCase):
         seed(self.store)
 
     def test_real_tool_loop_saves_and_replays_response_without_new_model_call(self):
-        model = FakeModel([call("set_preference", dict(kind="like", value="lentils", remove=False)),
-                           answer("Saved your preference")])
+        model = FakeModel(
+            [
+                call("set_preference", dict(kind="like", value="lentils", remove=False)),
+                answer("Saved your preference"),
+            ]
+        )
         chef = Chef(self.store, model)
         self.assertEqual(chef.chat("person-2", "I like lentils", "r1"), "Saved your preference")
         self.assertEqual(chef.chat("person-2", "I like lentils", "r1"), "Saved your preference")
@@ -51,8 +71,15 @@ class AgentTests(unittest.TestCase):
         self.assertEqual(self.store.household()["members"][1]["preferences"][0]["value"], "lentils")
 
     def test_tool_errors_are_returned_to_model_and_cannot_spoof_actor(self):
-        model = FakeModel([call("set_preference", dict(kind="like", value="lentils", remove=False,
-                                                       member_id="person-2")), answer("Please retry")])
+        model = FakeModel(
+            [
+                call(
+                    "set_preference",
+                    dict(kind="like", value="lentils", remove=False, member_id="person-2"),
+                ),
+                answer("Please retry"),
+            ]
+        )
         Chef(self.store, model).chat("person-1", "test", "r2")
         self.assertIn("error", json.loads(model.inputs[1][-1]["output"]))
         self.assertEqual(self.store.household()["members"][0]["preferences"], [])
@@ -89,15 +116,22 @@ class AgentTests(unittest.TestCase):
         settings = Settings(self.store.path, "x" * 32, "test-secret-never-print", "test-model")
         client = OpenAIResponses(settings)
         with patch("private_chef.agent.urlopen") as request:
-            request.return_value.__enter__.return_value.read.return_value = json.dumps(answer()).encode()
+            request.return_value.__enter__.return_value.read.return_value = json.dumps(
+                answer()
+            ).encode()
             client.create([{"role": "user", "content": "Hello"}], [])
             payload = json.loads(request.call_args.args[0].data)
             self.assertFalse(payload["store"])
             self.assertFalse(payload["parallel_tool_calls"])
             self.assertEqual(payload["model"], "test-model")
-        for error in (HTTPError("https://api.openai.com", 401, "test-secret-never-print", {}, None),
-                      URLError("test-secret-never-print")):
-            with self.subTest(error=type(error)), patch("private_chef.agent.urlopen", side_effect=error):
+        for error in (
+            HTTPError("https://api.openai.com", 401, "test-secret-never-print", {}, None),
+            URLError("test-secret-never-print"),
+        ):
+            with (
+                self.subTest(error=type(error)),
+                patch("private_chef.agent.urlopen", side_effect=error),
+            ):
                 with self.assertRaises(ChefError) as caught:
                     client.create([], [])
                 self.assertNotIn(settings.openai_key, str(caught.exception))

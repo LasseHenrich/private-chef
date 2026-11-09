@@ -47,10 +47,11 @@ class Settings:
             model=env.get("OPENAI_MODEL", "gpt-4.1-mini"),
             host=env.get("CHEF_HOST", "127.0.0.1"),
             port=int(env.get("CHEF_PORT", "8787")),
-            names=(env.get("CHEF_USER_1_NAME", "Person 1"),
-                   env.get("CHEF_USER_2_NAME", "Person 2")),
-            whatsapp=(env.get("CHEF_USER_1_WHATSAPP", ""),
-                      env.get("CHEF_USER_2_WHATSAPP", "")),
+            names=(
+                env.get("CHEF_USER_1_NAME", "Person 1"),
+                env.get("CHEF_USER_2_NAME", "Person 2"),
+            ),
+            whatsapp=(env.get("CHEF_USER_1_WHATSAPP", ""), env.get("CHEF_USER_2_WHATSAPP", "")),
         )
 
     def validate_server(self) -> None:

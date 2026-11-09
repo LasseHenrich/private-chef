@@ -1,0 +1,10 @@
+.env
+.env.*
+data/
+.openclaw/
+.venv/
+**/__pycache__/
+**/*.sqlite*
+**/*.db
+node_modules/
+*.bundle
