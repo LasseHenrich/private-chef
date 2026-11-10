@@ -11,10 +11,13 @@ from .config import PROJECT_ROOT, Settings, read_env
 from .validation import ChefError
 
 
-def configure(settings: Settings, root: Path = PROJECT_ROOT) -> Path:
+def configure(settings: Settings, root: Path = PROJECT_ROOT, *, self_chat: bool = False) -> Path:
     settings.validate_server()
-    if not all(settings.whatsapp):
-        raise ChefError("Set both CHEF_USER_1_WHATSAPP and CHEF_USER_2_WHATSAPP in .env first")
+    numbers = [number for number in settings.whatsapp if number]
+    if not numbers:
+        raise ChefError(
+            "Set at least one CHEF_USER_1_WHATSAPP or CHEF_USER_2_WHATSAPP in .env first"
+        )
     if not (root / "openclaw" / "openclaw.plugin.json").is_file():
         raise ChefError(
             "WhatsApp setup needs the repository's openclaw/ adapter; run from the checkout"
@@ -40,9 +43,10 @@ def configure(settings: Settings, root: Path = PROJECT_ROOT) -> Path:
         "channels": {
             "whatsapp": {
                 "dmPolicy": "allowlist",
-                "allowFrom": list(settings.whatsapp),
+                "allowFrom": numbers,
                 "groupPolicy": "disabled",
                 "configWrites": False,
+                "selfChatMode": self_chat,
             }
         },
         "plugins": {
@@ -63,7 +67,9 @@ def configure(settings: Settings, root: Path = PROJECT_ROOT) -> Path:
 
 
 def launch(arguments: list[str], root: Path = PROJECT_ROOT) -> int:
-    executable = shutil.which("openclaw")
+    local_bin = root / "data" / "runtime" / "node_modules" / ".bin"
+    path = str(local_bin) + os.pathsep + os.environ.get("PATH", "")
+    executable = shutil.which("openclaw", path=path)
     if not executable:
         raise ChefError("OpenClaw is not installed. Follow docs/openclaw.md, then retry")
     state = root / "data" / "openclaw"
@@ -71,6 +77,8 @@ def launch(arguments: list[str], root: Path = PROJECT_ROOT) -> int:
     if not config.exists():
         raise ChefError("Run configure-openclaw after setting your WhatsApp numbers")
     env = {**read_env(root / ".env"), **os.environ}
+    # The private runtime includes a compatible Node.js alongside OpenClaw.
+    env["PATH"] = path
     env["OPENCLAW_STATE_DIR"] = str(state)
     env["OPENCLAW_CONFIG_PATH"] = str(config)
     return subprocess.run([executable, *arguments], env=env, check=False).returncode

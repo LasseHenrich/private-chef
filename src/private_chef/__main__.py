@@ -50,8 +50,13 @@ def main():
     commands.add_parser("setup", help="Create .env and initialize the database without API calls")
     commands.add_parser("serve", help="Start authenticated local HTTP service")
     commands.add_parser("state", help="Print shared records (contains personal information)")
-    commands.add_parser(
+    gateway_setup = commands.add_parser(
         "configure-openclaw", help="Generate isolated WhatsApp gateway configuration"
+    )
+    gateway_setup.add_argument(
+        "--self-chat",
+        action="store_true",
+        help="Use your existing account through WhatsApp's Message yourself chat",
     )
     gateway = commands.add_parser(
         "openclaw", help="Run OpenClaw with the local .env and private state"
@@ -74,7 +79,7 @@ def main():
             sys.exit(launch(args.arguments))
         settings = Settings.load()
         if args.command == "configure-openclaw":
-            print(f"Created {configure(settings)}")
+            print(f"Created {configure(settings, self_chat=args.self_chat)}")
             return
         store = Store(settings.db_path)
         store.initialize(settings.names)

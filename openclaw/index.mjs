@@ -4,6 +4,9 @@ import { randomUUID } from "node:crypto";
 export function normalizeSender(sender) {
   if (typeof sender !== "string") return null;
   if (/^\+[1-9]\d{6,14}$/.test(sender)) return sender;
+  // OpenClaw's WhatsApp command authorization normalizes E.164 IDs to digits
+  // without the leading plus. Restore it before comparing to our strict allowlist.
+  if (/^[1-9]\d{6,14}$/.test(sender)) return `+${sender}`;
   const jid = sender.match(/^([1-9]\d{6,14})@s\.whatsapp\.net$/);
   return jid ? `+${jid[1]}` : null;
 }
@@ -71,6 +74,7 @@ export default {
         return ask(ctx.senderId, ctx.channel, ctx.args);
       },
     });
+    api.logger?.info("Private Chef ready: /chef command registered.");
 
     // Optional: normal OpenClaw conversation can call the same assistant. /chef is the
     // default to avoid an additional model call and to keep cooking requests explicit.

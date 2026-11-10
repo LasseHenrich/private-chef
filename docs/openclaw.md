@@ -16,12 +16,18 @@ references to the other person's messages may need a recipe ID or title.
 
 ## Installation and setup
 
-1. Install a current OpenClaw release using its [official installation guide](https://docs.openclaw.ai/install).
-   Use the Node.js version required by that release. The development environment used
-   for this implementation had Node 20 and no installed OpenClaw; live compatibility
-   must be checked during setup.
+1. Install a private Node 24/OpenClaw runtime without changing the system's Node version:
+
+   ```bash
+   bash scripts/install-openclaw.sh
+   ```
+
+   This requires internet access and npm. Packages, the installed version's lockfile,
+   and npm cache are kept under ignored `data/runtime/`. The Python wrapper prefers
+   this runtime automatically. A compatible system installation is also supported;
+   see the [official installation guide](https://docs.openclaw.ai/install).
 2. Run `python3 run.py setup` if you have not already, and populate `.env` with your
-   OpenAI key, names and both E.164 numbers:
+   OpenAI key, names and E.164 numbers. You can start with just the first number:
 
    ```dotenv
    CHEF_USER_1_WHATSAPP=+491234567890
@@ -39,6 +45,14 @@ references to the other person's messages may need a recipe ID or title.
    changing numbers, update `allowFrom` there and restart both processes; `.env` is
    also enforced by the plugin and the service.
 
+   If you are using your existing WhatsApp account instead of a separate bot account,
+   generate the configuration with `python3 run.py configure-openclaw --self-chat`.
+   Once paired, open WhatsApp's **Message yourself** conversation and send `/chef`
+   requests there. The account's other contacts are not on the allowlist, and groups
+   are disabled. Configuration generation refuses to overwrite an existing file.
+   If configuration was already generated, set `channels.whatsapp.selfChatMode` to
+   `true` in the private `data/openclaw/openclaw.json` instead.
+
 4. Run OpenClaw through the wrapper so `.env` and the isolated state path are supplied
    without exposing keys as command-line arguments:
 
@@ -49,7 +63,8 @@ references to the other person's messages may need a recipe ID or title.
    python3 run.py openclaw channels login --channel whatsapp
    ```
 
-   The local Private Chef plugin is loaded from the repository path in the generated
+   `config validate` should succeed before proceeding to login. The local Private Chef
+   plugin is loaded from the repository path in the generated
    config; no npm install is needed for that plugin. The WhatsApp plugin itself is a
    separate OpenClaw installation. Scan the login QR with the bot's WhatsApp account
    under **Settings → Linked devices**. Treat QR codes and session files as secrets.
@@ -70,6 +85,11 @@ references to the other person's messages may need a recipe ID or title.
    /chef What preferences do you have for me?
    /chef Recommend three dishes for both of us
    ```
+
+   In existing-account mode, send these in **Message yourself** on the phone whose
+   WhatsApp account you linked. Adding a second allowed person later requires
+   updating their number in `.env` and `channels.whatsapp.allowFrom`, then restarting
+   both processes. No wildcard allowlist is needed.
 
 If the gateway reports an incompatible configuration or plugin API, stop and resolve
 it before enabling broad access. The adapter uses the public `registerCommand`
@@ -119,8 +139,19 @@ use `/chef` for explicit requests. Replies in a group are visible to everyone in
 
 ## Troubleshooting
 
+- **Connected but `/chef` is silent:** restart the gateway after plugin source or
+  manifest changes. Look for `Private Chef ready: /chef command registered.` in its
+  startup output. The plugin manifest declares startup activation and ownership of
+  the `/chef` slash command; current OpenClaw releases otherwise leave command-only
+  plugins unloaded. Send a fresh `/chef` without arguments from the phone's
+  **Message yourself** chat to test routing without a model call. It should return
+  usage help even if the cooking service is stopped. Recommendations additionally
+  require `python3 run.py serve` to be running in a separate terminal. The QR login
+  command is a one-time setup step, not the cooking service.
 - **Unknown sender:** verify E.164 numbers in `.env` and gateway `allowFrom`. Phone
-  JIDs ending `@s.whatsapp.net` are normalized; opaque `@lid` identities fail closed.
+  JIDs ending `@s.whatsapp.net` and OpenClaw's digits-only command sender IDs are
+  normalized to the same E.164 number before allowlist comparison. Opaque `@lid`
+  identities fail closed. Restart the gateway after updating adapter code.
   If your OpenClaw version emits those identities, resolve them through trusted
   gateway metadata before changing the adapter; do not infer identity from chat text.
 - **Cannot reach chef:** check that `python3 run.py serve` is running. The launcher

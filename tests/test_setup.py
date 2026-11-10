@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from private_chef.__main__ import setup
 from private_chef.config import PROJECT_ROOT, Settings, project_root
-from private_chef.openclaw import configure
+from private_chef.openclaw import configure, launch
 from private_chef.validation import ChefError
 
 
@@ -65,6 +65,39 @@ class SetupTests(unittest.TestCase):
             patch("pathlib.Path.cwd", return_value=self.root),
         ):
             self.assertEqual(project_root(), self.root)
+
+    def test_single_person_existing_account_configuration_excludes_other_contacts(self):
+        (self.root / "openclaw").mkdir()
+        (self.root / "openclaw/openclaw.plugin.json").write_text("{}")
+        settings = Settings(
+            self.root / "chef.db",
+            "a" * 40,
+            "test-api-secret",
+            "test-model",
+            whatsapp=("+491111111111", ""),
+        )
+        config = json.loads(configure(settings, self.root, self_chat=True).read_text())
+        channel = config["channels"]["whatsapp"]
+        self.assertEqual(channel["allowFrom"], ["+491111111111"])
+        self.assertEqual(channel["dmPolicy"], "allowlist")
+        self.assertEqual(channel["groupPolicy"], "disabled")
+        self.assertTrue(channel["selfChatMode"])
+
+    def test_gateway_launcher_uses_the_private_runtime_without_shell_interpolation(self):
+        state = self.root / "data/openclaw"
+        state.mkdir(parents=True)
+        (state / "openclaw.json").write_text("{}")
+        local_bin = self.root / "data/runtime/node_modules/.bin"
+        with (
+            patch("private_chef.openclaw.shutil.which", return_value=str(local_bin / "openclaw")),
+            patch("private_chef.openclaw.subprocess.run") as run,
+        ):
+            run.return_value.returncode = 0
+            self.assertEqual(launch(["channels", "login", "--channel", "whatsapp"], self.root), 0)
+            self.assertEqual(run.call_args.args[0][0], str(local_bin / "openclaw"))
+            self.assertTrue(run.call_args.kwargs["env"]["PATH"].startswith(str(local_bin)))
+            self.assertEqual(run.call_args.kwargs["env"]["OPENCLAW_STATE_DIR"], str(state))
+            self.assertNotIn("shell", run.call_args.kwargs)
 
 
 if __name__ == "__main__":

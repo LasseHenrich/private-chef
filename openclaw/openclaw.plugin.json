@@ -2,6 +2,8 @@
   "id": "private-chef",
   "name": "Private Chef",
   "description": "Shared cooking recommendations, preferences, feedback and shopping",
+  "activation": { "onStartup": true },
+  "commandAliases": [{ "name": "chef", "kind": "runtime-slash" }],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

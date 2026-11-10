@@ -1,9 +1,16 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import test from "node:test";
 import plugin, { createBridge, normalizeSender } from "./index.mjs";
 
 const env = { CHEF_API_TOKEN: "test-token-".repeat(4), CHEF_USER_1_WHATSAPP: "+491111111111",
               CHEF_USER_2_WHATSAPP: "+492222222222" };
+
+test("manifest activates the command handler before any agent turn", async () => {
+  const manifest = JSON.parse(await readFile(new URL("./openclaw.plugin.json", import.meta.url), "utf8"));
+  assert.equal(manifest.activation.onStartup, true);
+  assert.ok(manifest.commandAliases.some(alias => alias.name === "chef" && alias.kind === "runtime-slash"));
+});
 
 test("bridge trusts metadata and sends the service token only in headers", async () => {
   let request;
@@ -30,6 +37,21 @@ test("unknown senders, channels and linked identities fail closed", async () => 
     assert.match((await ask(sender, channel, "Hi")).text, /configured/);
   }
   assert.equal(normalizeSender("491111111111@s.whatsapp.net"), env.CHEF_USER_1_WHATSAPP);
+});
+
+test("OpenClaw digits-only command sender IDs match only the same configured number", async () => {
+  let sent;
+  const ask = createBridge({}, env, async (_url, options) => {
+    sent = JSON.parse(options.body);
+    return { ok: true, json: async () => ({ reply: "Saved" }) };
+  });
+  assert.equal(normalizeSender("491111111111"), env.CHEF_USER_1_WHATSAPP);
+  assert.equal((await ask("491111111111", "whatsapp", "Show preferences")).text, "Saved");
+  assert.equal(sent.sender_id, env.CHEF_USER_1_WHATSAPP);
+  assert.match((await ask("493333333333", "whatsapp", "Hi")).text, /configured/);
+  for (const id of ["017612345678", "123456789@lid", "491111111111@g.us", "not-a-number"]) {
+    assert.equal(normalizeSender(id), null);
+  }
 });
 
 test("service URL and token validation prevent accidental credential leaks", () => {
@@ -61,6 +83,9 @@ test("plugin registers an authenticated command without needing an OpenClaw mode
     const help = await command.handler({ isAuthorizedSender: true, channel: "whatsapp",
                                          senderId: env.CHEF_USER_1_WHATSAPP });
     assert.match(help.text, /Try \/chef/);
+    const normalizedHelp = await command.handler({ isAuthorizedSender: true, channel: "whatsapp",
+                                                   senderId: env.CHEF_USER_1_WHATSAPP.slice(1) });
+    assert.match(normalizedHelp.text, /Try \/chef/);
   } finally {
     for (const key of Object.keys(env)) {
       if (old[key] === undefined) delete process.env[key]; else process.env[key] = old[key];
