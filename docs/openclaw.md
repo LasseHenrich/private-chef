@@ -127,6 +127,15 @@ use `/chef` for explicit requests. Replies in a group are visible to everyone in
   passes `CHEF_API_TOKEN` to the gateway. Restart both after changing it.
 - **OpenAI key/model rejected:** update `.env` with a valid API key and an available
   Responses-compatible model, then restart the service.
+- **OpenAI HTTP 429:** restart the service to use the current error diagnostics.
+  `credit_balance_exhausted` means the key's API organization has no available
+  prepaid credits; check that it is the organization you funded. `insufficient_quota`
+  is a broader billing/quota error. Organization/project spend limits and approved
+  usage limits can block access even with a positive balance; the error identifies
+  those separately. `rate_limit_exceeded` or `slow_down` means temporary throttling,
+  so check the selected model's limits and wait before retrying. The service does
+  not automatically retry a mutation. ChatGPT Plus billing is separate from this
+  application's API-key billing. See the [official API error guide](https://developers.openai.com/api/docs/guides/error-codes).
 - **Request times out:** check the shared list/preferences before repeating a mutation.
   The adapter intentionally does not retry a POST automatically.
 - **QR or session problems:** use the installed release's `channels` diagnostics.

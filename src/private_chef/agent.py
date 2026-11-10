@@ -42,6 +42,61 @@ fails, so do not blindly repeat mutations.
 """
 
 
+def provider_error(error: HTTPError) -> str:
+    """Classify a bounded provider error without exposing its message or credentials."""
+    explanations = {
+        401: "OpenAI rejected the API key",
+        403: "OpenAI access was denied",
+        404: "Configured OpenAI model is unavailable",
+    }
+    if error.code != 429:
+        error.close()
+        return explanations.get(error.code, "OpenAI request failed; try again later")
+    codes = {
+        "credit_balance_exhausted": (
+            "The API organization used by this key has no available prepaid credits. "
+            "Check that the payment completed and that the key belongs to the funded organization."
+        ),
+        "insufficient_quota": (
+            "API billing quota is unavailable for this key. Check the funded organization, "
+            "payment status, and organization/project limits. This is not a temporary rate limit."
+        ),
+        "organization_spend_limit_exceeded": (
+            "The API organization's spend limit was reached. Check its billing limits."
+        ),
+        "project_spend_limit_exceeded": (
+            "The API project's spend limit was reached. Check the limits of the key's project."
+        ),
+        "organization_usage_limit_exceeded": (
+            "The API organization reached its approved usage limit. "
+            "Check its usage limits; adding credits alone does not increase that limit."
+        ),
+        "rate_limit_exceeded": (
+            "A temporary API request/token rate limit was reached. "
+            "Wait before retrying and check the configured model's project rate limits."
+        ),
+        "slow_down": "OpenAI requested a slower request rate. Wait before retrying.",
+        "rate_limit_error": "A temporary API rate limit was reached. Wait before retrying.",
+    }
+    try:
+        raw = error.read(16001) if error.fp is not None else b""
+        payload = json.loads(raw) if len(raw) <= 16000 else {}
+        details = payload.get("error", {}) if isinstance(payload, dict) else {}
+        if isinstance(details, dict):
+            for field in ("code", "type"):
+                code = details.get(field)
+                if isinstance(code, str) and code in codes:
+                    return f"OpenAI {code}: {codes[code]}"
+    except (OSError, ValueError, TypeError, RecursionError):
+        pass
+    finally:
+        error.close()
+    return (
+        "OpenAI returned HTTP 429 without a recognized error code. "
+        "Check API billing and model rate limits; the cause could not be determined."
+    )
+
+
 class OpenAIResponses:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -73,16 +128,7 @@ class OpenAIResponses:
                 raise ChefError("Model response exceeded the size limit")
             data = json.loads(body)
         except HTTPError as error:
-            # Do not expose upstream bodies, headers, API keys or request text in errors/logs.
-            explanations = {
-                401: "OpenAI rejected the API key",
-                403: "OpenAI access was denied",
-                404: "Configured OpenAI model is unavailable",
-                429: "OpenAI quota or rate limit reached; try again later",
-            }
-            raise ChefError(
-                explanations.get(error.code, "OpenAI request failed; try again later")
-            ) from None
+            raise ChefError(provider_error(error)) from None
         except (URLError, TimeoutError, OSError, ValueError):
             raise ChefError(
                 "Cannot reach OpenAI or received an invalid response; try again later"

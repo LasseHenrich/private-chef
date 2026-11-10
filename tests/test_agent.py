@@ -1,3 +1,4 @@
+import io
 import json
 import tempfile
 import unittest
@@ -135,6 +136,61 @@ class AgentTests(unittest.TestCase):
                 with self.assertRaises(ChefError) as caught:
                     client.create([], [])
                 self.assertNotIn(settings.openai_key, str(caught.exception))
+
+    def test_provider_distinguishes_billing_and_rate_limit_errors(self):
+        client = OpenAIResponses(Settings(self.store.path, "x" * 32, "private-test-key", "test"))
+        expected = {
+            "credit_balance_exhausted": "funded organization",
+            "insufficient_quota": "not a temporary rate limit",
+            "project_spend_limit_exceeded": "project's spend limit",
+            "organization_spend_limit_exceeded": "organization's spend limit",
+            "organization_usage_limit_exceeded": "approved usage limit",
+            "rate_limit_exceeded": "temporary API request/token rate limit",
+            "slow_down": "slower request rate",
+        }
+        for code, message in expected.items():
+            body = {
+                "error": {
+                    "code": code,
+                    "type": "insufficient_quota",
+                    "message": "private-test-key and private user data",
+                }
+            }
+            error = HTTPError(
+                "https://api.openai.com",
+                429,
+                "private-test-key",
+                {},
+                io.BytesIO(json.dumps(body).encode()),
+            )
+            with self.subTest(code=code), patch("private_chef.agent.urlopen", side_effect=error):
+                with self.assertRaises(ChefError) as caught:
+                    client.create([], [])
+                self.assertIn(code, str(caught.exception))
+                self.assertIn(message, str(caught.exception))
+                self.assertNotIn("private-test-key", str(caught.exception))
+                self.assertNotIn("private user data", str(caught.exception))
+
+    def test_unrecognized_or_malformed_error_bodies_fail_safely(self):
+        client = OpenAIResponses(Settings(self.store.path, "x" * 32, "private-test-key", "test"))
+        for body in (
+            b"private-test-key",
+            b"[]",
+            b'{"error": {"code": ["x"]}}',
+            b'{"error":{"code":"private-test-key","message":"secret"}}',
+            b"x" * 17000,
+        ):
+            error = HTTPError(
+                "https://api.openai.com", 429, "private-test-key", {}, io.BytesIO(body)
+            )
+            with (
+                self.subTest(length=len(body)),
+                patch("private_chef.agent.urlopen", side_effect=error),
+            ):
+                with self.assertRaises(ChefError) as caught:
+                    client.create([], [])
+                self.assertIn("HTTP 429", str(caught.exception))
+                self.assertNotIn("private-test-key", str(caught.exception))
 
 
 if __name__ == "__main__":
