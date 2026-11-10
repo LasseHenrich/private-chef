@@ -37,10 +37,14 @@ def validate(value, schema: dict, path: str = "input") -> None:
         for index, item in enumerate(value):
             validate(item, schema["items"], f"{path}[{index}]")
     elif kind == "string":
-        if not schema.get("minLength", 0) <= len(value.strip()) <= schema.get("maxLength", 2000):
+        if len(value.strip()) < schema.get("minLength", 0) or len(value) > schema.get(
+            "maxLength", 2000
+        ):
             raise ChefError(f"{path} has an invalid length")
     elif kind in {"number", "integer"}:
-        if not math.isfinite(value) or not schema.get("minimum", -1e12) <= value <= schema.get(
-            "maximum", 1e12
+        # Compare integer bounds before converting to float; enormous JSON integers
+        # must fail validation rather than raising OverflowError in math.isfinite.
+        if not schema.get("minimum", -1e12) <= value <= schema.get("maximum", 1e12) or (
+            isinstance(value, float) and not math.isfinite(value)
         ):
             raise ChefError(f"{path} is outside the allowed range")

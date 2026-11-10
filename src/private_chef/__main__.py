@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import sys
+from importlib.resources import files
 from pathlib import Path
 from uuid import uuid4
 
@@ -23,7 +24,12 @@ def setup(root: Path = PROJECT_ROOT):
     if path.exists():
         print(".env already exists; left unchanged")
     else:
-        template = (root / ".env.example").read_text()
+        template_path = root / ".env.example"
+        template = (
+            template_path.read_text()
+            if template_path.exists()
+            else files("private_chef").joinpath("env.example").read_text()
+        )
         template = template.replace(
             "CHEF_API_TOKEN=\n", f"CHEF_API_TOKEN={secrets.token_urlsafe(32)}\n"
         )

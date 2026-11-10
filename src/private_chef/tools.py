@@ -202,6 +202,7 @@ class Tools:
 
     def recommend(self, count: int) -> dict:
         household, history = self.store.household(), self.store.history()
+        ratings = self.store.rating_summary()
         candidates = []
         for recipe in self.store.recipes():
             if blocked_reasons(recipe, household):
@@ -225,16 +226,10 @@ class Tools:
                             )
                         elif preference["kind"] == "dislike":
                             score -= 2
-                ratings = [
-                    f["rating"]
-                    for f in history["feedback"]
-                    if f["member_id"] == member["id"] and f["recipe_id"] == recipe["id"]
-                ]
-                if ratings:
-                    score += sum(ratings) / len(ratings) - 3
-                    reasons.append(
-                        f"{member['name']}'s average rating: {sum(ratings) / len(ratings):.1f}/5"
-                    )
+                rating = ratings.get((member["id"], recipe["id"]))
+                if rating is not None:
+                    score += rating - 3
+                    reasons.append(f"{member['name']}'s average rating: {rating:.1f}/5")
                 scores.append(score)
             repeated = any(
                 meal["recipe_id"] == recipe["id"] and meal["status"] != "cancelled"

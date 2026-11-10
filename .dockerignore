@@ -8,3 +8,7 @@ data/
 **/*.db
 node_modules/
 *.bundle
+.git/
+.ruff_cache/
+build/
+dist/

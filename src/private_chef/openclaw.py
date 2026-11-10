@@ -15,6 +15,10 @@ def configure(settings: Settings, root: Path = PROJECT_ROOT) -> Path:
     settings.validate_server()
     if not all(settings.whatsapp):
         raise ChefError("Set both CHEF_USER_1_WHATSAPP and CHEF_USER_2_WHATSAPP in .env first")
+    if not (root / "openclaw" / "openclaw.plugin.json").is_file():
+        raise ChefError(
+            "WhatsApp setup needs the repository's openclaw/ adapter; run from the checkout"
+        )
     state = root / "data" / "openclaw"
     state.mkdir(mode=0o700, parents=True, exist_ok=True)
     path = state / "openclaw.json"

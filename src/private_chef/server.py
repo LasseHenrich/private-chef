@@ -80,9 +80,9 @@ class Application:
                     result = Tools(self.chef.store, actor).execute(name, body.get("arguments", {}))
                 return 200, {"result": result}
             message, request_id = body.get("message"), body.get("request_id")
-            if not isinstance(message, str) or not 1 <= len(message.strip()) <= 4000:
+            if not isinstance(message, str) or not message.strip() or len(message) > 4000:
                 raise ChefError("message must contain 1–4000 characters")
-            if not isinstance(request_id, str) or not 1 <= len(request_id) <= 128:
+            if not isinstance(request_id, str) or not request_id.strip() or len(request_id) > 128:
                 raise ChefError("A request_id of 1–128 characters is required")
             if not self.slots.acquire(blocking=False):
                 return 429, {"error": "Chef is busy; try again shortly"}
@@ -156,7 +156,7 @@ def handler_for(application: Application):
                 if len(raw) != length:
                     raise ChefError("Incomplete request")
                 body = json.loads(raw)
-            except (TimeoutError, ValueError, UnicodeError, ChefError):
+            except (TimeoutError, ValueError, UnicodeError, ChefError, RecursionError):
                 self.close_connection = True
                 self.send_json(400, {"error": "Invalid JSON request"})
                 return

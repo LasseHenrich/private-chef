@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS selections (
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS shopping (
-    id INTEGER PRIMARY KEY, name TEXT NOT NULL, unit TEXT NOT NULL,
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, unit TEXT NOT NULL,
     manual_quantity TEXT NOT NULL DEFAULT '0', purchased INTEGER NOT NULL DEFAULT 0,
     UNIQUE(name, unit)
 );
@@ -54,7 +54,20 @@ CREATE TABLE IF NOT EXISTS requests (
     message TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('pending','complete','failed')),
     reply TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-PRAGMA user_version = 1;
+"""
+
+SHOPPING_MIGRATION = """
+BEGIN IMMEDIATE;
+CREATE TABLE shopping_v2 (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, unit TEXT NOT NULL,
+    manual_quantity TEXT NOT NULL DEFAULT '0', purchased INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(name, unit)
+);
+INSERT INTO shopping_v2 SELECT * FROM shopping;
+DROP TABLE shopping;
+ALTER TABLE shopping_v2 RENAME TO shopping;
+PRAGMA user_version = 2;
+COMMIT;
 """
 
 
@@ -88,10 +101,22 @@ class Store:
         self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         with self.connect() as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version > 1:
+            if version > 2:
                 raise ChefError("Database was created by a newer application version")
             db.execute("PRAGMA journal_mode=WAL")
+            if version == 1:
+                # Preserve referenced item IDs while rebuilding their parent table.
+                # Foreign keys are disabled only for this isolated migration connection.
+                db.execute("PRAGMA foreign_keys=OFF")
+                try:
+                    db.executescript(SHOPPING_MIGRATION)
+                except Exception:
+                    db.rollback()
+                    raise
+                finally:
+                    db.execute("PRAGMA foreign_keys=ON")
             db.executescript(SCHEMA)
+            db.execute("PRAGMA user_version=2")
             for member_id, name in zip(("person-1", "person-2"), names, strict=True):
                 db.execute(
                     "INSERT INTO members VALUES (?,?) "
@@ -203,6 +228,17 @@ class Store:
                 dict(row)
                 for row in db.execute("SELECT * FROM selections WHERE status='planned' ORDER BY id")
             ]
+
+    def rating_summary(self) -> dict[tuple[str, int], float]:
+        """Use all ratings for ranking, independently of the bounded history shown in chat."""
+        with self.connect() as db:
+            return {
+                (row["member_id"], row["recipe_id"]): row["average"]
+                for row in db.execute(
+                    "SELECT member_id,recipe_id,AVG(rating) AS average FROM feedback "
+                    "GROUP BY member_id,recipe_id"
+                )
+            }
 
     def select(self, actor: str, recipe_id: int, servings: int) -> dict:
         self.recipe(recipe_id)

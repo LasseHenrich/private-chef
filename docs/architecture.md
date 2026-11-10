@@ -53,6 +53,12 @@ contributions instead of adding them twice. Manual extras are tracked separately
 No ingredient alias ontology or unit conversion is guessed. Recipe contents are
 immutable once saved; save a separate recipe variant when changing ingredients.
 
+Shopping item IDs are monotonic, including after list clearing, to avoid applying
+old conversation references to new ingredients. Startup migrates version-1 SQLite
+databases to version 2 without changing existing item IDs or contributions. Ranking
+uses aggregated ratings across the entire feedback table; the chat-facing history
+limit does not expire older preference evidence.
+
 Per-person recent chat context is bounded. Profiles, recipes, selections, feedback and
 request replay records persist until the database is removed or a future retention
 policy is added. These are private runtime files and must not be committed.

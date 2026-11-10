@@ -71,6 +71,16 @@ class HTTPTests(unittest.TestCase):
         self.assertIn(b"200 OK", result)
         self.assertIn(b'"reply": "Hi"', result)
 
+    def test_deeply_nested_json_is_rejected_without_crashing_the_handler(self):
+        body = b"[" * 1500 + b"0" + b"]" * 1500
+        headers = (
+            b"POST /v1/chat HTTP/1.0\r\n"
+            + self.auth
+            + b"Content-Type: application/json\r\nContent-Length: "
+            + str(len(body)).encode()
+        )
+        self.assertIn(b"400 Bad Request", self.request(headers + b"\r\n\r\n" + body))
+
 
 if __name__ == "__main__":
     unittest.main()

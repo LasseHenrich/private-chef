@@ -90,6 +90,12 @@ class ServerTests(unittest.TestCase):
         with patch.dict("os.environ", {"CHEF_PORT": "9999"}, clear=True):
             self.assertEqual(Settings.load(self.path).port, 9999)
 
+    def test_whitespace_padding_cannot_bypass_chat_length_limits(self):
+        body = dict(member_id="person-1", message="Hi" + " " * 4000, request_id="r-padding")
+        self.assertEqual(self.app.dispatch("POST", "/v1/chat", self.auth, body)[0], 400)
+        body.update(message="Hi", request_id="   ")
+        self.assertEqual(self.app.dispatch("POST", "/v1/chat", self.auth, body)[0], 400)
+
 
 if __name__ == "__main__":
     unittest.main()

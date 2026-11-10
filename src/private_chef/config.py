@@ -5,7 +5,16 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+def project_root() -> Path:
+    """Use the checkout when running from source, or the working directory when installed."""
+    checkout = Path(__file__).resolve().parents[2]
+    if (checkout / "pyproject.toml").is_file() and (checkout / "src" / "private_chef").is_dir():
+        return checkout
+    return Path.cwd()
+
+
+PROJECT_ROOT = project_root()
 
 
 def read_env(path: Path) -> dict[str, str]:

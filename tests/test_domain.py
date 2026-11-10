@@ -1,10 +1,11 @@
+import sqlite3
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from private_chef.seed import seed
-from private_chef.store import Store
+from private_chef.store import SCHEMA, Store
 from private_chef.tools import Tools
 from private_chef.validation import ChefError
 
@@ -142,6 +143,56 @@ class DomainTests(unittest.TestCase):
         self.two.execute("set_preference", dict(kind="diet", value="vegan", remove=False))
         with self.assertRaisesRegex(ChefError, "conflicts with current restrictions"):
             self.one.execute("build_shopping_list", {})
+        self.assertEqual(self.store.shopping(), [])
+
+    def test_ranking_keeps_ratings_older_than_the_chat_history_limit(self):
+        self.store.feedback("person-1", 1, 5, "Favourite")
+        for _ in range(101):
+            self.store.feedback("person-2", 2, 3, "Neutral")
+        self.assertFalse(any(item["recipe_id"] == 1 for item in self.store.history()["feedback"]))
+        ranked = self.one.recommend(1)["candidates"][0]
+        self.assertEqual(ranked["recipe"]["id"], 1)
+        self.assertTrue(any("5.0/5" in reason for reason in ranked["reasons"]))
+
+    def test_removed_shopping_ids_are_not_reused_for_different_ingredients(self):
+        original = self.store.add_shopping("rice", 100, "g")[0]["id"]
+        self.store.remove_shopping(original)
+        replacement = self.store.add_shopping("beans", 100, "g")[0]["id"]
+        self.assertGreater(replacement, original)
+        with self.assertRaises(ChefError):
+            self.store.mark_shopping(original, True)
+        self.store.clear_shopping()
+        self.assertGreater(self.store.add_shopping("onions", 1, "piece")[0]["id"], replacement)
+
+    def test_version_one_migration_preserves_shopping_contributions_and_bought_flags(self):
+        legacy = Store(Path(self.temp.name) / "legacy.db")
+        with sqlite3.connect(legacy.path) as db:
+            db.executescript(SCHEMA.replace("PRIMARY KEY AUTOINCREMENT", "PRIMARY KEY"))
+            db.execute("PRAGMA user_version=1")
+            db.executemany(
+                "INSERT INTO members VALUES (?,?)", [("person-1", "One"), ("person-2", "Two")]
+            )
+        seed(legacy)
+        legacy.select("person-1", 1, 2)
+        before = legacy.build_shopping()
+        legacy.mark_shopping(before[0]["id"], True)
+        before = legacy.shopping()
+        legacy.initialize()
+        self.assertEqual(legacy.shopping(), before)
+        with legacy.connect() as db:
+            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 2)
+            self.assertEqual(db.execute("PRAGMA foreign_key_check").fetchall(), [])
+        legacy.clear_shopping()
+        new_id = legacy.add_shopping("beans", 100, "g")[0]["id"]
+        self.assertGreater(new_id, max(item["id"] for item in before))
+
+    def test_oversized_whitespace_and_huge_numbers_fail_validation_without_writes(self):
+        for args in (
+            dict(name="rice", quantity=10**1000, unit="g"),
+            dict(name="rice" + " " * 1000, quantity=1, unit="g"),
+        ):
+            with self.subTest(field=type(args["quantity"])), self.assertRaises(ChefError):
+                self.one.execute("add_shopping_item", args)
         self.assertEqual(self.store.shopping(), [])
 
 
