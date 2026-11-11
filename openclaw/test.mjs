@@ -76,7 +76,7 @@ test("plugin registers an authenticated command without needing an OpenClaw mode
   Object.assign(process.env, env);
   try {
     let command;
-    plugin.register({ registerCommand: (value) => { command = value; }, pluginConfig: {} });
+    plugin.register({ registerCommand: (value) => { command = value; }, on: () => {}, pluginConfig: {} });
     assert.equal(command.name, "chef");
     assert.equal(command.requireAuth, true);
     assert.match((await command.handler({ isAuthorizedSender: false })).text, /Not authorized/);
@@ -93,12 +93,40 @@ test("plugin registers an authenticated command without needing an OpenClaw mode
   }
 });
 
+test("default routing silently claims personal messages and leaves only /chef for dispatch", async () => {
+  const old = { ...process.env };
+  Object.assign(process.env, env);
+  try {
+    let hook;
+    plugin.register({
+      registerCommand: () => {},
+      on: (name, handler) => { assert.equal(name, "before_dispatch"); hook = handler; },
+      pluginConfig: {},
+    });
+    for (const content of ["Hello", "Dinner at seven?", "/chefish", "Please /chef help", "/status", ""]) {
+      assert.deepEqual(await hook({ content }, { channelId: "whatsapp" }), { handled: true });
+    }
+    assert.deepEqual(await hook({}, { channelId: "whatsapp" }), { handled: true });
+    for (const content of ["/chef", "/chef Recommend dinner", " /CHEF\nShow our list"]) {
+      assert.equal(await hook({ content }, { channelId: "whatsapp" }), undefined);
+    }
+    assert.equal(await hook({ body: "/chef help", channel: "whatsapp" }, {}), undefined);
+    assert.deepEqual(await hook({ content: "Hello", channel: "whatsapp" }, {}), { handled: true });
+    assert.equal(await hook({ content: "Hello" }, { channelId: "webchat" }), undefined);
+  } finally {
+    for (const key of Object.keys(env)) {
+      if (old[key] === undefined) delete process.env[key]; else process.env[key] = old[key];
+    }
+  }
+});
+
 test("optional natural-language tool obtains identity from trusted factory context", async () => {
   const old = { ...process.env };
   Object.assign(process.env, env);
   try {
     let factory;
     plugin.register({ registerCommand: () => {}, registerTool: (value) => { factory = value; },
+                      on: () => assert.fail("natural-language mode must not silence messages"),
                       pluginConfig: { naturalLanguageTool: true } });
     const tool = factory({ messageChannel: "whatsapp", requesterSenderId: "+493333333333" });
     assert.deepEqual(Object.keys(tool.parameters.properties), ["message"]);

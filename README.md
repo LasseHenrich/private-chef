@@ -149,6 +149,9 @@ before updating an existing installation.
 
 ## Privacy, limitations and deployment
 
+For the always-on WhatsApp setup, follow the [Oracle Cloud VM deployment
+guide](docs/oracle-deployment.md), including migration, systemd services and backups.
+
 `.env`, databases, OpenClaw sessions, logs and runtime directories are ignored by Git.
 Never add a real key to examples or generated configuration. The `.env` reader does
 not execute shell expressions. Restart the processes after editing configuration.

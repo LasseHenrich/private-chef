@@ -64,6 +64,17 @@ export default {
   name: "Private Chef",
   register(api) {
     const ask = createBridge(api.pluginConfig ?? {});
+    if (!api.pluginConfig?.naturalLanguageTool) {
+      // Disabling the tool alone does not disable OpenClaw's general agent.
+      // Claim ordinary WhatsApp messages silently before model dispatch.
+      api.on("before_dispatch", (event, ctx) => {
+        const channel = ctx.channelId ?? event.channel;
+        if (channel !== "whatsapp") return;
+        const text = typeof event.content === "string" ? event.content : event.body;
+        if (typeof text === "string" && /^\s*\/chef(?:\s|$)/i.test(text)) return;
+        return { handled: true };
+      });
+    }
     api.registerCommand({
       name: "chef",
       description: "Ask your household cooking assistant",

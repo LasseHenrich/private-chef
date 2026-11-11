@@ -14,6 +14,13 @@ maps trusted sender metadata to `person-1`/`person-2`; message text cannot choos
 identity. Both chats use the same database. Context is kept per person, so ambiguous
 references to the other person's messages may need a recipe ID or title.
 
+By default, a `before_dispatch` plugin hook silently handles WhatsApp messages
+that do not start with `/chef` as a complete command word. This prevents OpenClaw's
+general agent from answering ordinary personal conversations or sending them to
+its model. Merely setting `naturalLanguageTool: false` does not provide that gate
+in older versions of this adapter. After updating `openclaw/index.mjs`, restart
+the gateway and test both an ordinary message (no reply) and `/chef` (help reply).
+
 ## Installation and setup
 
 1. Install a private Node 24/OpenClaw runtime without changing the system's Node version:
@@ -99,6 +106,10 @@ contract; tests exercise that contract but do not run OpenClaw itself.
 
 The explicit `/chef` command is the default. To also let OpenClaw's agent route
 ordinary cooking messages, edit `data/openclaw/openclaw.json`:
+
+Enabling this option also removes the silent message gate: the general agent can
+respond to ordinary messages from allowed contacts. Avoid enabling it for an
+account used for personal conversations.
 
 ```json
 {
